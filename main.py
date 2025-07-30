@@ -18,7 +18,7 @@ def index():
 
 @app.route('/generate-image', methods=['POST'])
 def generate_image():
-    """Generate image using gpt4free API"""
+    """Generate image using multiple fallback methods"""
     try:
         data = request.get_json()
         prompt = data.get('prompt', '')
@@ -26,79 +26,213 @@ def generate_image():
         if not prompt:
             return jsonify({'error': 'Prompt is required'}), 400
         
-        # Example using g4f (you may need to adjust based on actual gpt4free API)
-        # This is a mock implementation - adjust based on the actual gpt4free API structure
+        logging.info(f"Generating image for prompt: {prompt}")
+        
+        # Try to generate image
         response = call_gpt4free_api(prompt)
         
         if response.get('success'):
-            return jsonify({
+            result = {
                 'success': True,
+                'image_data': response.get('image_data'),
                 'image_url': response.get('image_url'),
-                'image_data': response.get('image_data')
-            })
+                'method': response.get('method', 'unknown'),
+                'provider': response.get('provider', 'unknown')
+            }
+            
+            # Add note if it's a demo
+            if response.get('note'):
+                result['note'] = response.get('note')
+            
+            logging.info(f"Image generated successfully using: {result.get('method')}")
+            return jsonify(result)
         else:
-            return jsonify({'error': 'Failed to generate image'}), 500
+            error_msg = response.get('error', 'Failed to generate image with all methods')
+            logging.error(f"Image generation failed: {error_msg}")
+            return jsonify({
+                'error': error_msg,
+                'details': 'Try checking your API configuration or network connection'
+            }), 500
             
     except Exception as e:
-        logging.error(f"Error generating image: {str(e)}")
-        return jsonify({'error': 'Internal server error'}), 500
+        logging.error(f"Error in generate_image endpoint: {str(e)}")
+        return jsonify({
+            'error': 'Internal server error',
+            'details': str(e) if os.environ.get('FLASK_ENV') == 'development' else 'Please try again'
+        }), 500
 
 def call_gpt4free_api(prompt):
-    """Call the gpt4free API to generate an image"""
+    """Call the gpt4free API to generate an image using multiple methods"""
+    
+    # Method 1: Try g4f library with image generation
     try:
-        # Method 1: Using direct API call (adjust URL based on actual endpoint)
-        api_url = "https://api.gpt4free.io/generate-image"  # Example URL
+        import g4f
+        from g4f.Provider import Bing, OpenaiChat, You
         
-        payload = {
-            "prompt": prompt,
-            "model": "dalle-3",  # or whatever model is available
-            "size": "1024x1024"
-        }
+        # Try multiple providers that support image generation
+        providers = [Bing, You, OpenaiChat]
         
-        headers = {
-            "Content-Type": "application/json",
-            # Add any required headers/API keys here
-        }
+        for provider in providers:
+            try:
+                logging.info(f"Trying provider: {provider.__name__}")
+                
+                # For image generation, we need to use a model that supports it
+                response = g4f.ChatCompletion.create(
+                    model=g4f.models.gpt_4,
+                    messages=[{
+                        "role": "user", 
+                        "content": f"Create an image of: {prompt}"
+                    }],
+                    provider=provider,
+                )
+                
+                if response and len(response) > 10:  # Basic check for valid response
+                    logging.info(f"Success with provider: {provider.__name__}")
+                    return {
+                        'success': True,
+                        'image_data': response,
+                        'provider': provider.__name__
+                    }
+                    
+            except Exception as provider_error:
+                logging.warning(f"Provider {provider.__name__} failed: {str(provider_error)}")
+                continue
+                
+    except ImportError:
+        logging.error("g4f library not available")
+    except Exception as e:
+        logging.error(f"g4f general error: {str(e)}")
+    
+    # Method 2: Try alternative g4f approach with different models
+    try:
+        import g4f
         
-        response = requests.post(api_url, json=payload, headers=headers, timeout=30)
+        # Try with image-specific prompt
+        image_prompt = f"Generate a detailed image of: {prompt}. Make it high quality and artistic."
         
-        if response.status_code == 200:
-            result = response.json()
+        response = g4f.ChatCompletion.create(
+            model="gpt-4",
+            messages=[{"role": "user", "content": image_prompt}],
+            stream=False,
+        )
+        
+        if response:
             return {
                 'success': True,
-                'image_url': result.get('image_url'),
-                'image_data': result.get('image_data')
+                'image_data': response,
+                'method': 'alternative_g4f'
+            }
+            
+    except Exception as e:
+        logging.error(f"Alternative g4f method failed: {str(e)}")
+    
+    # Method 3: Try using Hugging Face API (free tier)
+    try:
+        hf_response = generate_with_huggingface(prompt)
+        if hf_response.get('success'):
+            return hf_response
+    except Exception as e:
+        logging.error(f"Hugging Face method failed: {str(e)}")
+    
+    # Method 4: Mock/Demo response for testing
+    if os.environ.get('FLASK_ENV') == 'development':
+        return generate_demo_image(prompt)
+    
+    return {'success': False, 'error': 'All image generation methods failed'}
+
+def generate_with_huggingface(prompt):
+    """Try generating image using Hugging Face Inference API"""
+    try:
+        # Using Stable Diffusion via Hugging Face
+        API_URL = "https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5"
+        
+        # You can get a free API token from huggingface.co
+        headers = {
+            "Authorization": f"Bearer {os.environ.get('HUGGINGFACE_API_TOKEN', '')}"
+        }
+        
+        response = requests.post(
+            API_URL,
+            headers=headers,
+            json={"inputs": prompt},
+            timeout=60
+        )
+        
+        if response.status_code == 200:
+            # Convert image bytes to base64
+            import base64
+            image_base64 = base64.b64encode(response.content).decode('utf-8')
+            
+            return {
+                'success': True,
+                'image_data': f"data:image/png;base64,{image_base64}",
+                'method': 'huggingface'
             }
         else:
-            logging.error(f"API call failed: {response.status_code}")
-            return {'success': False}
+            logging.error(f"Hugging Face API error: {response.status_code}")
             
-    except requests.exceptions.RequestException as e:
-        logging.error(f"Request error: {str(e)}")
+    except Exception as e:
+        logging.error(f"Hugging Face error: {str(e)}")
+    
+    return {'success': False}
+
+def generate_demo_image(prompt):
+    """Generate a demo placeholder image for testing"""
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+        import io
+        import base64
         
-        # Method 2: Fallback using g4f library (if available)
+        # Create a simple placeholder image
+        width, height = 512, 512
+        img = Image.new('RGB', (width, height), color='lightblue')
+        draw = ImageDraw.Draw(img)
+        
+        # Add text
         try:
-            import g4f
-            
-            response = g4f.ChatCompletion.create(
-                model="gpt-4",
-                messages=[{"role": "user", "content": f"Generate an image: {prompt}"}],
-                provider=g4f.Provider.Bing,  # or another provider that supports images
-            )
-            
-            # Process the response to extract image data
-            # This will depend on how g4f returns image data
-            if response:
-                return {
-                    'success': True,
-                    'image_data': response  # Adjust based on actual response format
-                }
-            
-        except ImportError:
-            logging.error("g4f library not available")
-        except Exception as e:
-            logging.error(f"g4f error: {str(e)}")
+            # Try to use default font
+            font = ImageFont.load_default()
+        except:
+            font = None
         
+        # Wrap text
+        lines = []
+        words = prompt.split()
+        current_line = ""
+        
+        for word in words:
+            test_line = current_line + " " + word if current_line else word
+            if len(test_line) < 25:  # Simple wrap at 25 chars
+                current_line = test_line
+            else:
+                if current_line:
+                    lines.append(current_line)
+                current_line = word
+        if current_line:
+            lines.append(current_line)
+        
+        # Draw text lines
+        y_start = height // 2 - (len(lines) * 20) // 2
+        for i, line in enumerate(lines[:5]):  # Max 5 lines
+            draw.text((50, y_start + i * 25), line, fill='darkblue', font=font)
+        
+        # Add demo watermark
+        draw.text((10, height - 30), "DEMO IMAGE", fill='red', font=font)
+        
+        # Convert to base64
+        buffer = io.BytesIO()
+        img.save(buffer, format='PNG')
+        img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        
+        return {
+            'success': True,
+            'image_data': f"data:image/png;base64,{img_base64}",
+            'method': 'demo',
+            'note': 'This is a demo placeholder. Configure API keys for real generation.'
+        }
+        
+    except Exception as e:
+        logging.error(f"Demo image generation failed: {str(e)}")
         return {'success': False}
 
 @app.route('/proxy-image')
