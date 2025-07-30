@@ -277,7 +277,14 @@
                 const data = await response.json();
 
                 if (data.success) {
-                    showSuccess('Image generated successfully!');
+                    let successMsg = 'Image generated successfully!';
+                    if (data.method) {
+                        successMsg += ` (Method: ${data.method})`;
+                    }
+                    if (data.note) {
+                        successMsg += ` - ${data.note}`;
+                    }
+                    showSuccess(successMsg);
                     
                     // Display the image
                     const img = document.createElement('img');
@@ -322,7 +329,11 @@
 
                 } else {
                     setLoading(false);
-                    showError(data.error || 'Failed to generate image. Please try again.');
+                    let errorMsg = data.error || 'Failed to generate image. Please try again.';
+                    if (data.details) {
+                        errorMsg += ` Details: ${data.details}`;
+                    }
+                    showError(errorMsg);
                 }
 
             } catch (err) {
