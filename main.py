@@ -323,6 +323,31 @@ def proxy_image():
         logging.error(f"Error proxying image: {str(e)}")
         return jsonify({'error': 'Failed to proxy image'}), 500
 
+@app.route('/test-image')
+def test_image():
+    """Test endpoint to verify image generation works"""
+    try:
+        result = generate_demo_image("Test image - beautiful sunset over mountains")
+        
+        if result.get('success'):
+            return f'''
+            <html>
+                <body>
+                    <h2>Image Generation Test</h2>
+                    <p>Method: {result.get('method')}</p>
+                    <p>Note: {result.get('note', 'N/A')}</p>
+                    <img src="{result.get('image_data')}" style="max-width: 500px;">
+                    <br><br>
+                    <a href="/">Back to main app</a>
+                </body>
+            </html>
+            '''
+        else:
+            return f"<h2>Test Failed</h2><p>Error: {result.get('error')}</p><a href='/'>Back</a>"
+            
+    except Exception as e:
+        return f"<h2>Test Exception</h2><p>{str(e)}</p><a href='/'>Back</a>"
+
 @app.errorhandler(404)
 def not_found(error):
     return jsonify({'error': 'Not found'}), 404
