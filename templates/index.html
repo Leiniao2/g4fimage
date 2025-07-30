@@ -135,92 +135,6 @@
             transform: scale(1.02);
         }
 
-        .provider-select {
-            width: 100%;
-            padding: 15px;
-            border: 2px solid #e1e5e9;
-            border-radius: 10px;
-            font-size: 16px;
-            transition: all 0.3s ease;
-            background: white;
-            appearance: none;
-            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6,9 12,15 18,9'%3e%3c/polyline%3e%3c/svg%3e");
-            background-repeat: no-repeat;
-            background-position: right 15px center;
-            background-size: 20px;
-            padding-right: 50px;
-        }
-
-        .provider-select:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-
-        .provider-info {
-            margin-top: 10px;
-            padding: 15px;
-            background: #f8f9fa;
-            border-radius: 8px;
-            border-left: 4px solid #667eea;
-            font-size: 14px;
-            line-height: 1.5;
-            display: none;
-        }
-
-        .provider-info.show {
-            display: block;
-            animation: slideDown 0.3s ease;
-        }
-
-        @keyframes slideDown {
-            from {
-                opacity: 0;
-                transform: translateY(-10px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .provider-status {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: 600;
-            margin-left: 8px;
-        }
-
-        .status-available {
-            background: #d4edda;
-            color: #155724;
-        }
-
-        .status-needs-token {
-            background: #fff3cd;
-            color: #856404;
-        }
-
-        .status-unavailable {
-            background: #f8d7da;
-            color: #721c24;
-        }
-
-        .generation-info {
-            background: #e7f3ff;
-            border: 1px solid #b3d9ff;
-            border-radius: 10px;
-            padding: 15px;
-            margin: 20px 0;
-            font-size: 14px;
-        }
-
-        .generation-info strong {
-            color: #0066cc;
-        }
-
         .error {
             background: #ff6b6b;
             color: white;
@@ -283,14 +197,6 @@
                     required
                 >
             </div>
-
-            <div class="input-group">
-                <label for="provider">Select AI Provider:</label>
-                <select id="provider" name="provider" class="provider-select">
-                    <option value="auto">🤖 Auto-Select Best Available</option>
-                </select>
-                <div id="providerInfo" class="provider-info"></div>
-            </div>
             
             <button type="submit" class="btn" id="generateBtn">
                 Generate Image
@@ -311,90 +217,11 @@
     <script>
         const form = document.getElementById('imageForm');
         const promptInput = document.getElementById('prompt');
-        const providerSelect = document.getElementById('provider');
-        const providerInfo = document.getElementById('providerInfo');
         const generateBtn = document.getElementById('generateBtn');
         const loading = document.getElementById('loading');
         const error = document.getElementById('error');
         const success = document.getElementById('success');
         const result = document.getElementById('result');
-
-        let providers = {};
-
-        // Load providers on page load
-        async function loadProviders() {
-            try {
-                const response = await fetch('/providers');
-                providers = await response.json();
-                
-                // Populate provider select
-                providerSelect.innerHTML = '<option value="auto">🤖 Auto-Select Best Available</option>';
-                
-                Object.entries(providers).forEach(([key, provider]) => {
-                    const option = document.createElement('option');
-                    option.value = key;
-                    
-                    let statusIcon = '';
-                    if (provider.status === 'available') {
-                        statusIcon = '✅';
-                    } else if (provider.status === 'needs_token') {
-                        statusIcon = '🔑';
-                    } else {
-                        statusIcon = '❌';
-                    }
-                    
-                    option.textContent = `${statusIcon} ${provider.name} - ${provider.quality} (${provider.speed})`;
-                    option.disabled = provider.status === 'unavailable';
-                    
-                    providerSelect.appendChild(option);
-                });
-                
-            } catch (err) {
-                console.error('Failed to load providers:', err);
-            }
-        }
-
-        // Show provider info when selection changes
-        providerSelect.addEventListener('change', function() {
-            const selectedProvider = this.value;
-            
-            if (selectedProvider === 'auto') {
-                providerInfo.classList.remove('show');
-                return;
-            }
-            
-            const provider = providers[selectedProvider];
-            if (provider) {
-                let statusClass = 'status-available';
-                let statusText = 'Ready';
-                
-                if (provider.status === 'needs_token') {
-                    statusClass = 'status-needs-token';
-                    statusText = 'Needs API Key';
-                } else if (provider.status === 'unavailable') {
-                    statusClass = 'status-unavailable';
-                    statusText = 'Unavailable';
-                }
-                
-                providerInfo.innerHTML = `
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                        <strong>${provider.name}</strong>
-                        <span class="provider-status ${statusClass}">${statusText}</span>
-                    </div>
-                    <div style="margin-bottom: 8px;">${provider.description}</div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px;">
-                        <div><strong>Quality:</strong> ${provider.quality}</div>
-                        <div><strong>Speed:</strong> ${provider.speed}</div>
-                        <div><strong>Cost:</strong> ${provider.free ? 'Free' : 'Paid'}</div>
-                        <div><strong>Setup:</strong> ${provider.requirements}</div>
-                    </div>
-                `;
-                providerInfo.classList.add('show');
-            }
-        });
-
-        // Load providers when page loads
-        loadProviders();
 
         function showError(message) {
             error.textContent = message;
@@ -429,8 +256,6 @@
             e.preventDefault();
             
             const prompt = promptInput.value.trim();
-            const provider = providerSelect.value;
-            
             if (!prompt) {
                 showError('Please enter a prompt for the image.');
                 return;
@@ -446,32 +271,20 @@
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ prompt, provider })
+                    body: JSON.stringify({ prompt })
                 });
 
                 const data = await response.json();
 
                 if (data.success) {
                     let successMsg = 'Image generated successfully!';
-                    if (data.method && data.method !== 'unknown') {
-                        successMsg += ` Using ${providers[data.method]?.name || data.method}`;
+                    if (data.method) {
+                        successMsg += ` (Method: ${data.method})`;
                     }
-                    if (data.generation_time) {
-                        successMsg += ` in ${data.generation_time}`;
+                    if (data.note) {
+                        successMsg += ` - ${data.note}`;
                     }
                     showSuccess(successMsg);
-                    
-                    // Show generation info
-                    if (data.method !== 'demo') {
-                        const infoDiv = document.createElement('div');
-                        infoDiv.className = 'generation-info';
-                        infoDiv.innerHTML = `
-                            <div><strong>Provider:</strong> ${providers[data.method]?.name || data.method}</div>
-                            <div><strong>Generation Time:</strong> ${data.generation_time || 'N/A'}</div>
-                            <div><strong>Quality:</strong> ${providers[data.method]?.quality || 'N/A'}</div>
-                        `;
-                        result.appendChild(infoDiv);
-                    }
                     
                     // Display the image
                     const img = document.createElement('img');
@@ -479,8 +292,10 @@
                     img.alt = 'Generated image';
                     
                     if (data.image_url) {
+                        // If we have a direct URL
                         img.src = data.image_url;
                     } else if (data.image_data) {
+                        // If we have base64 data
                         if (data.image_data.startsWith('data:')) {
                             img.src = data.image_data;
                         } else {
@@ -507,18 +322,10 @@
                     downloadBtn.onclick = function() {
                         const link = document.createElement('a');
                         link.href = img.src;
-                        link.download = `ai-image-${Date.now()}.png`;
+                        link.download = `generated-image-${Date.now()}.png`;
                         link.click();
                     };
                     result.appendChild(downloadBtn);
-
-                    // Add note if present
-                    if (data.note) {
-                        const noteDiv = document.createElement('div');
-                        noteDiv.style.cssText = 'margin-top: 15px; padding: 10px; background: #fff3cd; border-radius: 8px; font-size: 14px; color: #856404;';
-                        noteDiv.textContent = data.note;
-                        result.appendChild(noteDiv);
-                    }
 
                 } else {
                     setLoading(false);
@@ -531,10 +338,6 @@
 
             } catch (err) {
                 setLoading(false);
-                console.error('Error:', err);
-                showError('An error occurred while generating the image. Please try again.');
-            }
-        });
                 console.error('Error:', err);
                 showError('An error occurred while generating the image. Please try again.');
             }
