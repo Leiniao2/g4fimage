@@ -18,26 +18,31 @@ def index():
 
 @app.route('/generate-image', methods=['POST'])
 def generate_image():
-    """Generate image using multiple fallback methods"""
+    """Generate image using selected provider"""
     try:
         data = request.get_json()
         prompt = data.get('prompt', '')
+        provider = data.get('provider', 'auto')  # Default to auto-select
         
         if not prompt:
             return jsonify({'error': 'Prompt is required'}), 400
         
-        logging.info(f"Generating image for prompt: {prompt}")
+        logging.info(f"Generating image for prompt: '{prompt}' using provider: {provider}")
         
-        # Try to generate image
-        response = call_gpt4free_api(prompt)
+        # Try to generate image with selected provider
+        if provider == 'auto':
+            response = call_gpt4free_api(prompt)  # Use auto-selection logic
+        else:
+            response = generate_with_specific_provider(prompt, provider)
         
         if response.get('success'):
             result = {
                 'success': True,
                 'image_data': response.get('image_data'),
                 'image_url': response.get('image_url'),
-                'method': response.get('method', 'unknown'),
-                'provider': response.get('provider', 'unknown')
+                'method': response.get('method', provider),
+                'provider': response.get('provider', provider),
+                'generation_time': response.get('generation_time', 'N/A')
             }
             
             # Add note if it's a demo
@@ -47,11 +52,11 @@ def generate_image():
             logging.info(f"Image generated successfully using: {result.get('method')}")
             return jsonify(result)
         else:
-            error_msg = response.get('error', 'Failed to generate image with all methods')
+            error_msg = response.get('error', f'Failed to generate image with {provider}')
             logging.error(f"Image generation failed: {error_msg}")
             return jsonify({
                 'error': error_msg,
-                'details': 'Try checking your API configuration or network connection'
+                'details': response.get('details', 'Try selecting a different provider or check your API configuration')
             }), 500
             
     except Exception as e:
@@ -60,6 +65,110 @@ def generate_image():
             'error': 'Internal server error',
             'details': str(e) if os.environ.get('FLASK_ENV') == 'development' else 'Please try again'
         }), 500
+
+@app.route('/providers')
+def get_providers():
+    """Get list of available providers with their status"""
+    providers = {
+        'pollinations': {
+            'name': 'Pollinations.ai',
+            'description': 'Free AI image generation, no API key required',
+            'status': 'available',
+            'free': True,
+            'quality': 'Good',
+            'speed': 'Fast (5-15s)',
+            'requirements': 'None'
+        },
+        'huggingface': {
+            'name': 'Hugging Face (Stable Diffusion)',
+            'description': 'High-quality Stable Diffusion models',
+            'status': 'available' if os.environ.get('HUGGINGFACE_API_TOKEN') else 'needs_token',
+            'free': True,
+            'quality': 'Excellent',
+            'speed': 'Medium (10-30s)',
+            'requirements': 'Free API token from huggingface.co'
+        },
+        'deepai': {
+            'name': 'DeepAI',
+            'description': 'Professional AI image generation',
+            'status': 'available' if os.environ.get('DEEPAI_API_KEY') else 'needs_token',
+            'free': False,
+            'quality': 'Very Good',
+            'speed': 'Fast (5-20s)',
+            'requirements': 'API key from deepai.org (has free tier)'
+        },
+        'replicate': {
+            'name': 'Replicate',
+            'description': 'Multiple AI models including DALL-E style',
+            'status': 'available' if os.environ.get('REPLICATE_API_TOKEN') else 'needs_token',
+            'free': False,
+            'quality': 'Excellent',
+            'speed': 'Medium (15-45s)',
+            'requirements': 'API token from replicate.com'
+        },
+        'stability': {
+            'name': 'Stability AI',
+            'description': 'Official Stable Diffusion API',
+            'status': 'available' if os.environ.get('STABILITY_API_KEY') else 'needs_token',
+            'free': False,
+            'quality': 'Excellent',
+            'speed': 'Fast (10-25s)',
+            'requirements': 'API key from stability.ai'
+        },
+        'openai': {
+            'name': 'OpenAI DALL-E',
+            'description': 'High-quality DALL-E image generation',
+            'status': 'available' if os.environ.get('OPENAI_API_KEY') else 'needs_token',
+            'free': False,
+            'quality': 'Excellent',
+            'speed': 'Fast (10-30s)',
+            'requirements': 'API key from openai.com'
+        },
+        'demo': {
+            'name': 'Demo Mode',
+            'description': 'Colorful placeholder images for testing',
+            'status': 'available',
+            'free': True,
+            'quality': 'Demo Only',
+            'speed': 'Instant',
+            'requirements': 'None'
+        }
+    }
+    
+    return jsonify(providers)
+
+def generate_with_specific_provider(prompt, provider):
+    """Generate image using a specific provider"""
+    import time
+    start_time = time.time()
+    
+    try:
+        if provider == 'pollinations':
+            result = generate_with_pollinations(prompt)
+        elif provider == 'huggingface':
+            result = generate_with_huggingface(prompt)
+        elif provider == 'deepai':
+            result = generate_with_deepai(prompt)
+        elif provider == 'replicate':
+            result = generate_with_replicate(prompt)
+        elif provider == 'stability':
+            result = generate_with_stability(prompt)
+        elif provider == 'openai':
+            result = generate_with_openai(prompt)
+        elif provider == 'demo':
+            result = generate_demo_image(prompt)
+        else:
+            return {'success': False, 'error': f'Unknown provider: {provider}'}
+        
+        # Add generation time
+        if result.get('success'):
+            result['generation_time'] = f"{time.time() - start_time:.1f}s"
+        
+        return result
+        
+    except Exception as e:
+        logging.error(f"Error with provider {provider}: {str(e)}")
+        return {'success': False, 'error': f'Provider {provider} failed: {str(e)}'}
 
 def call_gpt4free_api(prompt):
     """Call the gpt4free API to generate an image using multiple methods"""
@@ -95,7 +204,164 @@ def call_gpt4free_api(prompt):
     logging.info("All APIs failed, generating demo image...")
     return generate_demo_image(prompt)
 
-def generate_with_pollinations(prompt):
+def generate_with_replicate(prompt):
+    """Generate image using Replicate API"""
+    try:
+        api_token = os.environ.get('REPLICATE_API_TOKEN')
+        if not api_token:
+            return {'success': False, 'error': 'Replicate API token not configured'}
+        
+        headers = {
+            'Authorization': f'Token {api_token}',
+            'Content-Type': 'application/json'
+        }
+        
+        # Using SDXL model on Replicate
+        data = {
+            "version": "39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b",
+            "input": {
+                "prompt": prompt,
+                "width": 512,
+                "height": 512,
+                "num_outputs": 1,
+                "scheduler": "K_EULER",
+                "num_inference_steps": 20,
+                "guidance_scale": 7.5
+            }
+        }
+        
+        response = requests.post(
+            'https://api.replicate.com/v1/predictions',
+            headers=headers,
+            json=data,
+            timeout=10
+        )
+        
+        if response.status_code == 201:
+            prediction = response.json()
+            prediction_id = prediction['id']
+            
+            # Poll for completion
+            for _ in range(30):  # Wait up to 5 minutes
+                time.sleep(10)
+                status_response = requests.get(
+                    f'https://api.replicate.com/v1/predictions/{prediction_id}',
+                    headers=headers
+                )
+                
+                if status_response.status_code == 200:
+                    result = status_response.json()
+                    if result['status'] == 'succeeded' and result['output']:
+                        # Download image and convert to base64
+                        img_url = result['output'][0]
+                        img_response = requests.get(img_url, timeout=30)
+                        
+                        if img_response.status_code == 200:
+                            import base64
+                            image_base64 = base64.b64encode(img_response.content).decode('utf-8')
+                            
+                            return {
+                                'success': True,
+                                'image_data': f"data:image/png;base64,{image_base64}",
+                                'method': 'replicate'
+                            }
+                    elif result['status'] == 'failed':
+                        return {'success': False, 'error': 'Replicate generation failed'}
+        
+    except Exception as e:
+        logging.error(f"Replicate error: {str(e)}")
+    
+    return {'success': False, 'error': 'Replicate API failed'}
+
+def generate_with_stability(prompt):
+    """Generate image using Stability AI API"""
+    try:
+        api_key = os.environ.get('STABILITY_API_KEY')
+        if not api_key:
+            return {'success': False, 'error': 'Stability AI API key not configured'}
+        
+        response = requests.post(
+            "https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image",
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+            },
+            json={
+                "text_prompts": [
+                    {
+                        "text": prompt
+                    }
+                ],
+                "cfg_scale": 7,
+                "height": 512,
+                "width": 512,
+                "samples": 1,
+                "steps": 20,
+            },
+            timeout=60
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            
+            for i, image in enumerate(data["artifacts"]):
+                return {
+                    'success': True,
+                    'image_data': f"data:image/png;base64,{image['base64']}",
+                    'method': 'stability'
+                }
+        else:
+            logging.error(f"Stability AI error: {response.status_code} - {response.text}")
+    
+    except Exception as e:
+        logging.error(f"Stability AI error: {str(e)}")
+    
+    return {'success': False, 'error': 'Stability AI API failed'}
+
+def generate_with_openai(prompt):
+    """Generate image using OpenAI DALL-E API"""
+    try:
+        api_key = os.environ.get('OPENAI_API_KEY')
+        if not api_key:
+            return {'success': False, 'error': 'OpenAI API key not configured'}
+        
+        headers = {
+            'Authorization': f'Bearer {api_key}',
+            'Content-Type': 'application/json'
+        }
+        
+        data = {
+            'model': 'dall-e-3',
+            'prompt': prompt,
+            'n': 1,
+            'size': '1024x1024',
+            'response_format': 'b64_json'
+        }
+        
+        response = requests.post(
+            'https://api.openai.com/v1/images/generations',
+            headers=headers,
+            json=data,
+            timeout=60
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            if result['data'] and len(result['data']) > 0:
+                image_data = result['data'][0]['b64_json']
+                return {
+                    'success': True,
+                    'image_data': f"data:image/png;base64,{image_data}",
+                    'method': 'openai'
+                }
+        else:
+            logging.error(f"OpenAI API error: {response.status_code} - {response.text}")
+    
+    except Exception as e:
+        logging.error(f"OpenAI error: {str(e)}")
+    
+    return {'success': False, 'error': 'OpenAI API failed'}
     """Generate image using Pollinations API (free, no auth required)"""
     try:
         # Pollinations.ai provides free image generation
